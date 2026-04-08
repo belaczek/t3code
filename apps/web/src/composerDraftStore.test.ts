@@ -10,6 +10,7 @@ import {
   ProjectId,
   ThreadId,
   type ModelSelection,
+  type ProviderKind,
   type ProviderModelOptions,
 } from "@t3tools/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -91,7 +92,7 @@ function resetComposerDraftStore() {
 }
 
 function modelSelection(
-  provider: "codex" | "claudeAgent",
+  provider: ProviderKind,
   model: string,
   options?: ModelSelection["options"],
 ): ModelSelection {
@@ -1093,6 +1094,16 @@ describe("composerDraftStore setModelSelection", () => {
     expect(draftFor(threadId, TEST_ENVIRONMENT_ID)?.modelSelectionByProvider.codex).toEqual(
       modelSelection("codex", "gpt-5.3-codex"),
     );
+  });
+
+  it("stores copilot selections under the copilot provider key", () => {
+    const store = useComposerDraftStore.getState();
+
+    store.setModelSelection(threadId, modelSelection("copilot", "gpt-5.4"));
+
+    const draft = useComposerDraftStore.getState().draftsByThreadId[threadId];
+    expect(draft?.activeProvider).toBe("copilot");
+    expect(draft?.modelSelectionByProvider.copilot).toEqual(modelSelection("copilot", "gpt-5.4"));
   });
 });
 

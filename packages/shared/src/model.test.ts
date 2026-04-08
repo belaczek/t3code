@@ -51,6 +51,8 @@ describe("normalizeModelSlug", () => {
     expect(normalizeModelSlug("gpt-5-codex")).toBe("gpt-5.4");
     expect(normalizeModelSlug("5.3")).toBe("gpt-5.3-codex");
     expect(normalizeModelSlug("sonnet", "claudeAgent")).toBe("claude-sonnet-4-6");
+    expect(normalizeModelSlug("5.4", "copilot")).toBe("gpt-5.4");
+    expect(normalizeModelSlug("sonnet", "copilot")).toBe("claude-sonnet-4-6");
   });
 
   it("returns null for empty or missing values", () => {
@@ -80,10 +82,12 @@ describe("resolveSelectableModel", () => {
     const options = [
       { slug: "gpt-5.3-codex", name: "GPT-5.3 Codex" },
       { slug: "claude-sonnet-4-6", name: "Claude Sonnet 4.6" },
+      { slug: "gpt-5.4", name: "GPT-5.4" },
     ];
     expect(resolveSelectableModel("codex", "gpt-5.3-codex", options)).toBe("gpt-5.3-codex");
     expect(resolveSelectableModel("codex", "gpt-5.3 codex", options)).toBe("gpt-5.3-codex");
     expect(resolveSelectableModel("claudeAgent", "sonnet", options)).toBe("claude-sonnet-4-6");
+    expect(resolveSelectableModel("copilot", "5.4", options)).toBe("gpt-5.4");
   });
 });
 

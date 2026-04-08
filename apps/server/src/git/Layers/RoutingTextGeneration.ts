@@ -18,6 +18,7 @@ import {
 } from "../Services/TextGeneration.ts";
 import { CodexTextGenerationLive } from "./CodexTextGeneration.ts";
 import { ClaudeTextGenerationLive } from "./ClaudeTextGeneration.ts";
+import { CopilotTextGenerationLive } from "./CopilotTextGeneration.ts";
 
 // ---------------------------------------------------------------------------
 // Internal service tags so both concrete layers can coexist.
@@ -31,6 +32,10 @@ class ClaudeTextGen extends Context.Service<ClaudeTextGen, TextGenerationShape>(
   "t3/git/Layers/RoutingTextGeneration/ClaudeTextGen",
 ) {}
 
+class CopilotTextGen extends ServiceMap.Service<CopilotTextGen, TextGenerationShape>()(
+  "t3/git/Layers/RoutingTextGeneration/CopilotTextGen",
+) {}
+
 // ---------------------------------------------------------------------------
 // Routing implementation
 // ---------------------------------------------------------------------------
@@ -38,9 +43,19 @@ class ClaudeTextGen extends Context.Service<ClaudeTextGen, TextGenerationShape>(
 const makeRoutingTextGeneration = Effect.gen(function* () {
   const codex = yield* CodexTextGen;
   const claude = yield* ClaudeTextGen;
+  const copilot = yield* CopilotTextGen;
 
-  const route = (provider?: TextGenerationProvider): TextGenerationShape =>
-    provider === "claudeAgent" ? claude : codex;
+  const route = (provider?: TextGenerationProvider): TextGenerationShape => {
+    switch (provider) {
+      case "claudeAgent":
+        return claude;
+      case "copilot":
+        return copilot;
+      case "codex":
+      default:
+        return codex;
+    }
+  };
 
   return {
     generateCommitMessage: (input) =>
@@ -67,7 +82,19 @@ const InternalClaudeLayer = Layer.effect(
   }),
 ).pipe(Layer.provide(ClaudeTextGenerationLive));
 
+const InternalCopilotLayer = Layer.effect(
+  CopilotTextGen,
+  Effect.gen(function* () {
+    const svc = yield* TextGeneration;
+    return svc;
+  }),
+).pipe(Layer.provide(CopilotTextGenerationLive));
+
 export const RoutingTextGenerationLive = Layer.effect(
   TextGeneration,
   makeRoutingTextGeneration,
-).pipe(Layer.provide(InternalCodexLayer), Layer.provide(InternalClaudeLayer));
+).pipe(
+  Layer.provide(InternalCodexLayer),
+  Layer.provide(InternalClaudeLayer),
+  Layer.provide(InternalCopilotLayer),
+);

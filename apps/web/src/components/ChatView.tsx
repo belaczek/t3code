@@ -1420,6 +1420,126 @@ export default function ChatView(props: ChatViewProps) {
   const gitStatusQuery = useGitStatus({ environmentId, cwd: gitCwd });
   const keybindings = useServerKeybindings();
   const availableEditors = useServerAvailableEditors();
+  const modelOptionsByProvider = useMemo(
+    () => ({
+      codex: providerStatuses.find((provider) => provider.provider === "codex")?.models ?? [],
+      claudeAgent:
+        providerStatuses.find((provider) => provider.provider === "claudeAgent")?.models ?? [],
+      copilot: providerStatuses.find((provider) => provider.provider === "copilot")?.models ?? [],
+    }),
+    [providerStatuses],
+  );
+  const selectedModelForPickerWithCustomFallback = useMemo(() => {
+    const currentOptions = modelOptionsByProvider[selectedProvider];
+    return currentOptions.some((option) => option.slug === selectedModelForPicker)
+      ? selectedModelForPicker
+      : (normalizeModelSlug(selectedModelForPicker, selectedProvider) ?? selectedModelForPicker);
+  }, [modelOptionsByProvider, selectedModelForPicker, selectedProvider]);
+  const searchableModelOptions = useMemo(
+    () =>
+      AVAILABLE_PROVIDER_OPTIONS.filter(
+        (option) => lockedProvider === null || option.value === lockedProvider,
+      ).flatMap((option) =>
+        modelOptionsByProvider[option.value].map(({ slug, name }) => ({
+          provider: option.value,
+          providerLabel: option.label,
+          slug,
+          name,
+          searchSlug: slug.toLowerCase(),
+          searchName: name.toLowerCase(),
+          searchProvider: option.label.toLowerCase(),
+        })),
+      ),
+    [lockedProvider, modelOptionsByProvider],
+  );
+  const workspaceEntriesQuery = useQuery(
+    projectSearchEntriesQueryOptions({
+      environmentId,
+      cwd: gitCwd,
+      query: effectivePathQuery,
+      enabled: isPathTrigger,
+      limit: 80,
+    }),
+  );
+  const workspaceEntries = workspaceEntriesQuery.data?.entries ?? EMPTY_PROJECT_ENTRIES;
+  const composerMenuItems = useMemo<ComposerCommandItem[]>(() => {
+    if (!composerTrigger) return [];
+    if (composerTrigger.kind === "path") {
+      return workspaceEntries.map((entry) => ({
+        id: `path:${entry.kind}:${entry.path}`,
+        type: "path",
+        path: entry.path,
+        pathKind: entry.kind,
+        label: basenameOfPath(entry.path),
+        description: entry.parentPath ?? "",
+      }));
+    }
+
+    if (composerTrigger.kind === "slash-command") {
+      const slashCommandItems = [
+        {
+          id: "slash:model",
+          type: "slash-command",
+          command: "model",
+          label: "/model",
+          description: "Switch response model for this thread",
+        },
+        {
+          id: "slash:plan",
+          type: "slash-command",
+          command: "plan",
+          label: "/plan",
+          description: "Switch this thread into plan mode",
+        },
+        {
+          id: "slash:default",
+          type: "slash-command",
+          command: "default",
+          label: "/default",
+          description: "Switch this thread back to normal build mode",
+        },
+      ] satisfies ReadonlyArray<Extract<ComposerCommandItem, { type: "slash-command" }>>;
+      const query = composerTrigger.query.trim().toLowerCase();
+      if (!query) {
+        return [...slashCommandItems];
+      }
+      return slashCommandItems.filter(
+        (item) => item.command.includes(query) || item.label.slice(1).includes(query),
+      );
+    }
+
+    return searchableModelOptions
+      .filter(({ searchSlug, searchName, searchProvider }) => {
+        const query = composerTrigger.query.trim().toLowerCase();
+        if (!query) return true;
+        return (
+          searchSlug.includes(query) || searchName.includes(query) || searchProvider.includes(query)
+        );
+      })
+      .map(({ provider, providerLabel, slug, name }) => ({
+        id: `model:${provider}:${slug}`,
+        type: "model",
+        provider,
+        model: slug,
+        label: name,
+        description: `${providerLabel} · ${slug}`,
+      }));
+  }, [composerTrigger, searchableModelOptions, workspaceEntries]);
+  const composerMenuOpen = Boolean(composerTrigger);
+  const activeComposerMenuItem = useMemo(
+    () =>
+      composerMenuItems.find((item) => item.id === composerHighlightedItemId) ??
+      composerMenuItems[0] ??
+      null,
+    [composerHighlightedItemId, composerMenuItems],
+  );
+  composerMenuOpenRef.current = composerMenuOpen;
+  composerMenuItemsRef.current = composerMenuItems;
+  activeComposerMenuItemRef.current = activeComposerMenuItem;
+  const nonPersistedComposerImageIdSet = useMemo(
+    () => new Set(nonPersistedComposerImageIds),
+    [nonPersistedComposerImageIds],
+  );
   const activeProviderStatus = useMemo(
     () => providerStatuses.find((status) => status.provider === selectedProvider) ?? null,
     [selectedProvider, providerStatuses],
