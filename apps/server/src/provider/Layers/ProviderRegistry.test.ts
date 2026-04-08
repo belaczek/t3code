@@ -30,6 +30,7 @@ import {
   readCodexConfigModelProvider,
 } from "./CodexProvider";
 import { checkClaudeProviderStatus, parseClaudeAuthStatusFromOutput } from "./ClaudeProvider";
+import { checkCopilotProviderStatus } from "./CopilotProvider";
 import { haveProvidersChanged, ProviderRegistryLive } from "./ProviderRegistry";
 import { ServerSettingsService, type ServerSettingsShape } from "../../serverSettings";
 import { ProviderRegistry } from "../Services/ProviderRegistry";
@@ -502,6 +503,16 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
           {
             provider: "claudeAgent",
             status: "warning",
+            enabled: true,
+            installed: true,
+            auth: { status: "unknown" },
+            checkedAt: "2026-03-25T00:00:00.000Z",
+            version: "1.0.0",
+            models: [],
+          },
+          {
+            provider: "copilot",
+            status: "ready",
             enabled: true,
             installed: true,
             auth: { status: "unknown" },
@@ -1054,6 +1065,46 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
         assert.strictEqual(parsed.status, "warning");
         assert.strictEqual(parsed.auth.status, "unknown");
       });
+    });
+
+    describe("checkCopilotProviderStatus", () => {
+      it.effect("returns ready when copilot is installed even if auth is not probed", () =>
+        Effect.gen(function* () {
+          const status = yield* checkCopilotProviderStatus();
+          assert.strictEqual(status.provider, "copilot");
+          assert.strictEqual(status.status, "ready");
+          assert.strictEqual(status.installed, true);
+          assert.strictEqual(status.auth.status, "unknown");
+        }).pipe(
+          Effect.provide(
+            mockSpawnerLayer((args) => {
+              const joined = args.join(" ");
+              if (joined === "--version") {
+                return {
+                  stdout: "GitHub Copilot CLI 1.0.21.\n",
+                  stderr: "",
+                  code: 0,
+                };
+              }
+              throw new Error(`Unexpected args: ${joined}`);
+            }),
+          ),
+        ),
+      );
+
+      it.effect("returns unavailable when copilot is missing", () =>
+        Effect.gen(function* () {
+          const status = yield* checkCopilotProviderStatus();
+          assert.strictEqual(status.provider, "copilot");
+          assert.strictEqual(status.status, "error");
+          assert.strictEqual(status.installed, false);
+          assert.strictEqual(status.auth.status, "unknown");
+          assert.strictEqual(
+            status.message,
+            "GitHub Copilot CLI was not found. Install it or update the configured binary path.",
+          );
+        }).pipe(Effect.provide(failingSpawnerLayer("spawn copilot ENOENT"))),
+      );
     });
   },
 );
